@@ -523,7 +523,7 @@ class HeadlessApp(_OverlayConfigMixin):
             from ok.notification import NotificationManager
             ui_config = resolve_ui_config(config)
             is_web = (config.get('web_runtime')
-                      or (ui_config is not None and ui_config['type'] == 'web'))
+                      or (ui_config is not None and ui_config['type'] in {'web', 'gpui'}))
             notification_kwargs = {'system_notifier': None} if is_web else {}
             self.notification_manager = NotificationManager(
                 self.global_config, task_executor, exit_event,
@@ -636,7 +636,7 @@ class OK:
 
         self.config = config
         ui_config = resolve_ui_config(config)
-        if ui_config is not None and ui_config["type"] == "web":
+        if ui_config is not None and ui_config["type"] in {"web", "gpui"}:
             from ok.ui.web.requirements import check_web_requirements
             check_web_requirements()
 
@@ -744,6 +744,9 @@ class OK:
                     launch_mode=ui_config["launch_mode"],
                     ok_instance=self,
                 )
+            if ui_config is not None and ui_config["type"] == "gpui":
+                from ok.ui.gpui.launcher import run_gpui
+                return run_gpui(self.config, ok_instance=self)
             use_gui = (ui_config is not None and ui_config["type"] == "qt"
                        and not self.args.get('headless', False))
             if not use_gui and self.args.get('task', 0) > 0:
@@ -999,7 +1002,7 @@ class OK:
                                           config=self.config)
         onetime_tasks = list(self.config.get('onetime_tasks', []))
         ui_config = resolve_ui_config(self.config)
-        if ((ui_config is not None and ui_config["type"] == "web")
+        if ((ui_config is not None and ui_config["type"] in {"web", "gpui"})
                 or self.config.get("web_runtime", False)):
             from ok.task.web import configured_web_custom_tabs
             existing = {tuple(task[:2]) for task in onetime_tasks

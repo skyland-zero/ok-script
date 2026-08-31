@@ -3,8 +3,9 @@
 ## 无界面、桌面与 Web 模式
 
 自动化核心现已与 Qt 解耦。使用 `ok-script` 可无界面运行，使用
-`ok-script[qt]` 启用原有桌面界面，或使用 `ok-script[web]` 启用 FastAPI
-浏览器界面；对应命令为 `ok run_task`、`ok gui` 和 `ok web`。详见
+`ok-script[qt]` 启用原有桌面界面，使用 `ok-script[web]` 启用 FastAPI
+浏览器界面，使用 `ok-script[gpui]` 启用原生 GPUI 外壳；对应命令为
+`ok run_task`、`ok gui`、`ok web` 和 `ok gpui`。详见
 [运行时架构](docs/architecture.md)。
 
 [简体中文](README.md) | [English](README_en.md)
@@ -40,6 +41,7 @@ python -m pip install ok-script
 python -m pip install "ok-script[default]"
 python -m pip install "ok-script[qt]"
 python -m pip install "ok-script[web]"
+python -m pip install "ok-script[gpui]"
 python -m pip install "ok-script[adb]"
 python -m pip install "ok-script[ocr]"
 ```

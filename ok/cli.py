@@ -68,6 +68,15 @@ def run_web_command(args):
     return 0
 
 
+def run_gpui_command(args):
+    from ok import OK
+
+    config = dict(load_config(args.config))
+    config["gui"] = {"type": "gpui"}
+    OK(config).start()
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="ok")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -102,6 +111,10 @@ def build_parser():
     web_parser.add_argument("--port", type=int, default=0,
                             help="Port to listen on (default: choose an available port)")
     web_parser.set_defaults(func=run_web_command)
+
+    gpui_parser = subparsers.add_parser("gpui", help="Run the native GPUI desktop UI")
+    gpui_parser.add_argument("-c", "--config", help="Config import target")
+    gpui_parser.set_defaults(func=run_gpui_command)
 
     return parser
 

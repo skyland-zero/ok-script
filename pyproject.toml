@@ -50,6 +50,10 @@ web = [
     "uvicorn[standard]>=0.30.0",
     "pywebview>=5.4",
 ]
+gpui = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+]
 qt = [
     "PySide6-Essentials>=6.7.0",
     "PySideSix-Frameless-Window>=0.3.12",
@@ -92,6 +96,10 @@ web = [
     "uvicorn[standard]>=0.30.0",
     "pywebview>=5.4",
 ]
+gpui = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+]
 qt = [
     "PySide6-Essentials>=6.7.0",
     "PySideSix-Frameless-Window>=0.3.12",
@@ -124,3 +132,4 @@ exclude = ["tests*", "docs*"]
 
 [tool.setuptools.package-data]
 "ok.ui.web" = ["static/*.html", "static/*.js", "static/*.css", "static/*.png"]
+"ok.ui.gpui" = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "src/*.rs"]

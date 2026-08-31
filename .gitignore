@@ -42,6 +42,7 @@ my_build/
 site/
 node_modules/
 *.tsbuildinfo
+target/
 
 # PyInstaller
 # Usually these files are written by a python script from a template

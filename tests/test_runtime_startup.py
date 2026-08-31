@@ -71,6 +71,22 @@ def test_ok_checks_web_requirements_before_runtime_initialization():
     do_init.assert_not_called()
 
 
+def test_ok_checks_web_requirements_for_gpui_before_runtime_initialization():
+    failure = SystemExit(
+        "The web UI requires FastAPI and Uvicorn. Install ok-script[web]."
+    )
+
+    with patch(
+        "ok.ui.web.requirements.check_web_requirements", side_effect=failure
+    ) as check_requirements, patch.object(OK, "do_init") as do_init, \
+            pytest.raises(SystemExit) as exit_info:
+        OK({"gui": {"type": "gpui"}})
+
+    assert exit_info.value is failure
+    check_requirements.assert_called_once_with()
+    do_init.assert_not_called()
+
+
 def test_start_runtime_refreshes_devices_once_and_emits_start_success():
     runtime, controller = make_runtime()
     events = []
@@ -140,6 +156,16 @@ def test_ok_start_routes_nested_server_gui_without_opening_window():
     run_web.assert_called_once_with(
         runtime.config, open_browser=False, launch_mode="server", ok_instance=runtime
     )
+
+
+def test_ok_start_routes_nested_gpui_gui_to_native_shell():
+    runtime = object.__new__(OK)
+    runtime.config = {"gui": {"type": "gpui"}}
+
+    with patch("ok.ui.gpui.launcher.run_gpui", return_value=43210) as run_gpui:
+        assert runtime.start() == 43210
+
+    run_gpui.assert_called_once_with(runtime.config, ok_instance=runtime)
 
 
 def test_ok_start_exits_when_web_requirements_are_missing():

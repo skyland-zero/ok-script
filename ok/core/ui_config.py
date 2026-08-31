@@ -5,7 +5,7 @@ DEFAULT_WINDOW_SIZE = {
     "min_height": 800,
 }
 
-GUI_TYPES = {"qt", "web"}
+GUI_TYPES = {"qt", "web", "gpui"}
 WEB_LAUNCH_MODES = {"pywebview", "browser", "server"}
 
 
@@ -19,7 +19,7 @@ def resolve_ui_config(config):
             raise ValueError("gui must be a mapping")
         gui_type = raw_gui.get("type")
         if gui_type not in GUI_TYPES:
-            raise ValueError("gui.type must be 'qt' or 'web'")
+            raise ValueError("gui.type must be 'qt', 'web', or 'gpui'")
         launch_mode = raw_gui.get("launch_mode", "pywebview")
         if gui_type == "web" and launch_mode not in WEB_LAUNCH_MODES:
             raise ValueError(
@@ -39,6 +39,8 @@ def resolve_ui_config(config):
     }
     if gui_type == "web":
         resolved["launch_mode"] = launch_mode
+    elif gui_type == "gpui":
+        resolved["binary"] = raw_gui.get("binary")
     return resolved
 
 

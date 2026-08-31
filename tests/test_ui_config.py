@@ -29,6 +29,12 @@ def test_nested_web_defaults_to_pywebview():
     assert resolve_ui_config({"gui": {"type": "web"}})["launch_mode"] == "pywebview"
 
 
+def test_nested_gpui_config_keeps_native_binary_setting():
+    assert resolve_ui_config({"gui": {"type": "gpui", "binary": "client.exe"}}) == {
+        "type": "gpui", "binary": "client.exe", "window_size": DEFAULT_WINDOW_SIZE,
+    }
+
+
 def test_legacy_use_gui_true_means_qt():
     size = {"width": 1300, "height": 800, "min_width": 800, "min_height": 600}
 
