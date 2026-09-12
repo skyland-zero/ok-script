@@ -29,93 +29,91 @@ impl OkApp {
 
         // (a) identity card
         let identity = ui::card(cx)
-            .gap_3()
             .p(px(16.0))
             .child(
                 div()
                     .h_flex()
+                    .w_full()
                     .items_center()
+                    .justify_between()
                     .gap_3()
                     .child(
                         div()
-                            .grid()
-                            .items_center().justify_center()
-                            .size(px(42.0))
-                            .flex_none()
-                            .rounded_full()
-                            .bg(cx.theme().accent)
-                            .text_color(gpui::rgb(0x102a35))
-                            .text_size(px(15.0))
-                            .font_weight(FontWeight::BOLD)
-                            .child("OK"),
+                            .h_flex()
+                            .items_center()
+                            .gap_3()
+                            .min_w(px(0.0))
+                            .child(self.app_avatar(42.0, 15.0, cx))
+                            .child(
+                                div()
+                                    .v_flex()
+                                    .gap(px(2.0))
+                                    .min_w(px(0.0))
+                                    .child(
+                                        div()
+                                            .text_size(px(ui::FS_IDENTITY))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .truncate()
+                                            .child(if session.title.is_empty() {
+                                                "ok-script".to_owned()
+                                            } else {
+                                                session.title.clone()
+                                            }),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(ui::FS_SMALL))
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(format!(
+                                                "{} · {}",
+                                                if session.version.is_empty() {
+                                                    "dev".to_owned()
+                                                } else {
+                                                    session.version.clone()
+                                                },
+                                                if session.debug {
+                                                    t("Debug")
+                                                } else {
+                                                    t("Release")
+                                                }
+                                            )),
+                                    ),
+                            ),
                     )
                     .child(
-                        div()
-                            .v_flex()
-                            .gap(px(2.0))
-                            .child(
-                                div()
-                                    .text_size(px(ui::FS_IDENTITY))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(if session.title.is_empty() {
-                                        "ok-script".to_owned()
-                                    } else {
-                                        session.title.clone()
-                                    }),
+                        ui::toolbar(cx).flex_none().children(vec![
+                            ui::secondary_button("capture-tool", t("Capture"), cx)
+                                .icon(OkIcon::Capture.icon())
+                                .disabled(busy)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.post("/api/tools/capture", None, cx);
+                                }))
+                                .into_any_element(),
+                            ui::secondary_button(
+                                "capture-refresh",
+                                if self.state.pending("/api/devices/refresh") {
+                                    t("Refreshing")
+                                } else {
+                                    t("Refresh")
+                                },
+                                cx,
                             )
-                            .child(
-                                div()
-                                    .text_size(px(ui::FS_SMALL))
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(format!(
-                                        "{} · {}",
-                                        if session.version.is_empty() {
-                                            "dev".to_owned()
-                                        } else {
-                                            session.version.clone()
-                                        },
-                                        if session.debug {
-                                            t("Debug")
-                                        } else {
-                                            t("Release")
-                                        }
-                                    )),
-                            ),
+                            .icon(OkIcon::Refresh.icon())
+                            .disabled(busy)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.post("/api/devices/refresh", None, cx);
+                            }))
+                            .into_any_element(),
+                            self.start_pause_button(&status, busy, cx),
+                            ui::secondary_button("capture-stop-task", t("Stop task"), cx)
+                                .icon(OkIcon::Stop.icon())
+                                .disabled(busy || !status.running)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.post("/api/executor/stop-task", None, cx);
+                                }))
+                                .into_any_element(),
+                        ]),
                     ),
-            )
-            .child(
-                ui::toolbar(cx).children(vec![
-                    ui::secondary_button("capture-tool", t("Capture"), cx)
-                        .icon(OkIcon::Capture.icon())
-                        .disabled(busy)
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.post("/api/tools/capture", None, cx);
-                        }))
-                        .into_any_element(),
-                    ui::secondary_button(
-                        "capture-refresh",
-                        if self.state.pending("/api/devices/refresh") {
-                            t("Refreshing")
-                        } else {
-                            t("Refresh")
-                        },
-                        cx,
-                    )
-                    .icon(OkIcon::Refresh.icon())
-                    .disabled(busy)
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.post("/api/devices/refresh", None, cx);
-                    }))
-                    .into_any_element(),
-                    self.start_pause_button(&status, busy, cx),
-                    ui::secondary_button("capture-stop-task", t("Stop task"), cx)
-                        .icon(OkIcon::Stop.icon())
-                        .disabled(busy || !status.running)
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.post("/api/executor/stop-task", None, cx);
-                        }))
-                        .into_any_element(),
-                ]),
             );
 
         // (b) three selector columns
@@ -349,10 +347,20 @@ impl OkApp {
         busy: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let hotkey = status
+            .hotkey
+            .clone()
+            .filter(|value| !value.is_empty())
+            .map(|value| format!(" ({value})"))
+            .unwrap_or_default();
         let (label, icon, path) = if status.starting {
             (t("Starting"), OkIcon::Refresh, None)
         } else if status.paused {
-            (t("Start"), OkIcon::Play, Some("/api/executor/resume"))
+            (
+                format!("{}{hotkey}", t("Start")),
+                OkIcon::Play,
+                Some("/api/executor/resume"),
+            )
         } else {
             (t("Pause"), OkIcon::Pause, Some("/api/executor/pause"))
         };
@@ -453,8 +461,8 @@ impl OkApp {
             TaskFilter::Tasks => t("Tasks"),
             TaskFilter::Group(name) => name.clone(),
         };
-        let mut page = ui::page_root("task-page")
-            .child(ui::page_title(title, cx));
+        let _ = title;
+        let mut page = ui::page_root("task-page");
         if tasks.is_empty() {
             page = page.child(ui::muted_text(
                 if self.state.loaded {
@@ -612,9 +620,10 @@ impl OkApp {
             }
             if task.enabled {
                 actions = actions.child(
-                    ui::primary_button(
+                    ui::secondary_button(
                         ElementId::Name(SharedString::from(format!("task-stop-{name}"))),
                         t("Stop"),
+                        cx,
                     )
                     .icon(OkIcon::Stop.icon())
                     .disabled(busy)
@@ -627,9 +636,10 @@ impl OkApp {
             if !task.enabled || task.paused {
                 let paused = task.paused;
                 actions = actions.child(
-                    ui::primary_button(
+                    ui::secondary_button(
                         ElementId::Name(SharedString::from(format!("task-start-{name}"))),
                         if paused { t("Resume") } else { t("Start") },
+                        cx,
                     )
                     .icon(OkIcon::Play.icon())
                     .disabled(busy)

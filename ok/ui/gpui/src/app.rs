@@ -6,8 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use gpui::{
-    div, prelude::*, px, AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement,
-    ParentElement, Render, SharedString, Styled, Window, WindowAppearance,
+    div, img, prelude::*, px, AnyElement, App, Context, Div, ElementId, FontWeight, Hsla,
+    IntoElement, MouseButton, ObjectFit, ParentElement, Render, SharedString, Styled, Window,
+    WindowAppearance, WindowControlArea,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, ThemeMode};
 use serde_json::{json, Value};
@@ -17,6 +18,7 @@ use crate::components as ui;
 use crate::i18n;
 use crate::icons::OkIcon;
 use crate::model::*;
+use crate::theme::Tokens;
 use crate::state::{
     apply_value, classify, elapsed_text, AppState, Inputs, Page, Prefs, Route, Toast,
 };
@@ -854,6 +856,178 @@ impl OkApp {
 
     // --------------------------------------------------------------- rendering
 
+    /// `.window-titlebar`: drag region + window controls, drawn by the shell
+    /// because the window uses client-side decorations.
+    fn render_titlebar(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let dark = ui::is_dark(cx);
+        let title = if self.state.capture.title.is_empty() {
+            "ok-script".to_owned()
+        } else {
+            self.state.capture.title.clone()
+        };
+        let maximized = _window.is_maximized();
+        let hover: Hsla = if dark {
+            gpui::rgba(0xffffff17).into()
+        } else {
+            gpui::rgba(0x00000012).into()
+        };
+        let active: Hsla = if dark {
+            gpui::rgba(0xffffff0e).into()
+        } else {
+            gpui::rgba(0x0000000b).into()
+        };
+
+        // 16x16 application icon, or the web's `OK` fallback badge.
+        let icon = {
+            let icon_url = self
+                .state
+                .capture
+                .icon_url
+                .clone()
+                .or_else(|| self.state.about.icon_url.clone());
+            let mut rendered = None;
+            if let Some(url) = icon_url {
+                let absolute = self.client.url(&url);
+                self.ensure_image(&absolute);
+                if let Some(image) = self.images.get(&absolute).cloned() {
+                    rendered = Some(
+                        div()
+                            .size(px(16.0))
+                            .flex_none()
+                            .rounded(px(3.0))
+                            .overflow_hidden()
+                            .child(img(image).size_full().object_fit(ObjectFit::Contain))
+                            .into_any_element(),
+                    );
+                }
+            }
+            rendered.unwrap_or_else(|| {
+                div()
+                    .grid()
+                    .items_center()
+                    .justify_center()
+                    .size(px(16.0))
+                    .flex_none()
+                    .rounded(px(3.0))
+                    .bg(cx.theme().accent)
+                    .text_color(gpui::rgb(0x102a35))
+                    .text_size(px(8.0))
+                    .font_weight(FontWeight::BOLD)
+                    .child("OK")
+                    .into_any_element()
+            })
+        };
+
+        let drag_region = div()
+            .id("titlebar-drag")
+            .h_flex()
+            .flex_1()
+            .min_w(px(0.0))
+            .items_center()
+            .gap(px(8.0))
+            .pl(px(10.0))
+            .window_control_area(WindowControlArea::Drag)
+            .on_mouse_down(MouseButton::Left, move |event, window, _| {
+                if event.click_count >= 2 {
+                    window.zoom_window();
+                } else {
+                    window.start_window_move();
+                }
+            })
+            .child(icon)
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(cx.theme().foreground)
+                    .truncate()
+                    .child(title),
+            );
+
+        let control = |id: &'static str,
+                       glyph: OkIcon,
+                       area: WindowControlArea,
+                       close: bool,
+                       cx: &mut Context<Self>| {
+            div()
+                .id(id)
+                .grid()
+                .items_center()
+                .justify_center()
+                .w(px(46.0))
+                .h(px(32.0))
+                .flex_none()
+                .cursor_pointer()
+                .window_control_area(area)
+                .hover(move |style| {
+                    style.bg(if close {
+                        Tokens::window_close()
+                    } else {
+                        hover
+                    })
+                })
+                .active(move |style| {
+                    style.bg(if close {
+                        gpui::rgb(0xa92318).into()
+                    } else {
+                        active
+                    })
+                })
+                .child(glyph.icon().size(px(14.0)).text_color(if close {
+                    cx.theme().foreground
+                } else {
+                    cx.theme().foreground
+                }))
+        };
+
+        let minimize = control(
+            "window-minimize",
+            OkIcon::Subtract,
+            WindowControlArea::Min,
+            false,
+            cx,
+        )
+        .on_click(cx.listener(|_, _, window, _| window.minimize_window()));
+
+        let maximize = control(
+            "window-maximize",
+            OkIcon::Square,
+            WindowControlArea::Max,
+            false,
+            cx,
+        )
+        .on_click(cx.listener(|_, _, window, _| window.zoom_window()));
+
+        let close = control(
+            "window-close",
+            OkIcon::Close,
+            WindowControlArea::Close,
+            true,
+            cx,
+        )
+        .on_click(cx.listener(|_, _, window, _| window.remove_window()));
+
+        div()
+            .h_flex()
+            .w_full()
+            .flex_none()
+            .items_center()
+            .h(px(32.0))
+            .bg(cx.theme().title_bar)
+            .border_b_1()
+            .border_color(cx.theme().title_bar_border)
+            .child(drag_region)
+            .child(
+                div()
+                    .h_flex()
+                    .flex_none()
+                    .items_center()
+                    .child(minimize)
+                    .child(maximize)
+                    .child(close),
+            )
+            .into_any_element()
+    }
+
     fn render_sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
         let width = if self.collapsed {
             ui::SIDEBAR_COLLAPSED_WIDTH
@@ -959,10 +1133,19 @@ impl OkApp {
             Page::About => self.render_about(window, cx),
             Page::TaskTab(id) => self.render_task_tab(&id, window, cx),
         };
+        // `.content { background: linear-gradient(145deg, ...) }`
         let background = if ui::is_dark(cx) {
-            gpui::rgb(0x2e1f26)
+            gpui::linear_gradient(
+                145.0,
+                gpui::linear_color_stop(gpui::rgb(0x312229), 0.0),
+                gpui::linear_color_stop(gpui::rgb(0x2d1d24), 1.0),
+            )
         } else {
-            gpui::rgb(0xf7f0f4)
+            gpui::linear_gradient(
+                145.0,
+                gpui::linear_color_stop(gpui::rgb(0xfbf6f8), 0.0),
+                gpui::linear_color_stop(gpui::rgb(0xf3e9ee), 1.0),
+            )
         };
         div()
             .v_flex()
@@ -1155,6 +1338,7 @@ impl Render for OkApp {
             });
         }
 
+        let titlebar = self.render_titlebar(window, cx);
         let sidebar = self.render_sidebar(cx);
         let content = self.render_content(window, cx);
         let modal = if self.modal.is_some() {
@@ -1168,12 +1352,19 @@ impl Render for OkApp {
 
         div()
             .relative()
-            .h_flex()
+            .v_flex()
             .size_full()
             .bg(background)
             .text_color(foreground)
-            .child(sidebar)
-            .child(content)
+            .child(titlebar)
+            .child(
+                div()
+                    .h_flex()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .child(sidebar)
+                    .child(content),
+            )
             .when_some(modal, |this, modal| this.child(modal))
             .child(toasts)
     }

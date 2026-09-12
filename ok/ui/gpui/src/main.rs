@@ -26,7 +26,10 @@ mod theme;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use gpui::{px, size, AppContext as _, Application, Bounds, WindowBounds, WindowOptions};
+use gpui::{
+    px, size, AppContext as _, Application, Bounds, WindowBounds, WindowDecorations,
+    WindowOptions,
+};
 use gpui_component::Root;
 
 use api::ApiClient;
@@ -161,6 +164,14 @@ fn main() {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(min_width), px(min_height))),
+                // The shell draws its own title bar (like the web UI's
+                // `.window-titlebar`), so the OS frame is replaced.
+                window_decorations: Some(WindowDecorations::Client),
+                titlebar: Some(gpui::TitlebarOptions {
+                    // The shell paints the title bar itself.
+                    appears_transparent: true,
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             move |window, cx| {

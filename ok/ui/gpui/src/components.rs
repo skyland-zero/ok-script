@@ -261,6 +261,7 @@ pub fn nav_item(
         .px(px(7.0))
         .rounded(px(BUTTON_RADIUS))
         .bg(if active { active_bg } else { gpui::rgba(0x00000000).into() })
+        .when(active, |this| this.border_l_2().border_color(cx.theme().accent))
         .text_color(if active { foreground } else { icon_color })
         .text_size(px(FS_NAV))
         .cursor_pointer()
