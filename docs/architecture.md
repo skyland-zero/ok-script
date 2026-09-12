@@ -48,10 +48,13 @@ pip install --editable . --group default --group dev
 Add the `web`, `gpui`, `qt`, `adb`, or `ocr` group for the use case being developed.
 The GPUI client lives in `ok/ui/gpui` and is built on the published
 `gpui` 0.2.2 / `gpui-component` 0.5.1 crates (plus `gpui-component-assets` for
-component icons and `wry` for the `webview` feature used by task tabs), so the
-crate builds without tracking the Zed `main` branch. The checked-in
-`rust-toolchain.toml` selects the nightly toolchain those crates require. Build
-it from the crate directory with:
+component icons, `wry` for the `webview` feature used by task tabs, and
+`tree-sitter-languages` for editor highlighting), so the crate builds without
+tracking the Zed `main` branch. Enabling the language grammars needs `cc` pinned
+to `1.2.x` (`cargo update -p cc --precise 1.2.67`): `tree-sitter-sequel` requires
+`cc ~1.2.1` while gpui's `embed-resource` locked `1.4.5`, and only `1.2.x`
+satisfies both. The checked-in `rust-toolchain.toml` selects the nightly
+toolchain those crates require. Build it from the crate directory with:
 
 ```bash
 cargo build --release --locked

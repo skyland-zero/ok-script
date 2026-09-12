@@ -7,7 +7,7 @@ description = "Native GPUI desktop shell for ok-script"
 
 [dependencies]
 gpui = "0.2.2"
-gpui-component = { version = "0.5.1", features = ["webview"] }
+gpui-component = { version = "0.5.1", features = ["webview", "tree-sitter-languages"] }
 gpui-component-assets = "0.5.1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "ico", "webp"] }
 rust-i18n = "3"

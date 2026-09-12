@@ -45,6 +45,7 @@ struct Cli {
     theme: Option<String>,
     page: Option<String>,
     markup: Option<String>,
+    script: Option<String>,
 }
 
 impl Default for Cli {
@@ -60,6 +61,7 @@ impl Default for Cli {
             theme: None,
             page: None,
             markup: None,
+            script: None,
         }
     }
 }
@@ -82,6 +84,7 @@ fn parse_cli() -> Result<Cli, String> {
             "--locale" => cli.locale = Some(value()?),
             "--page" => cli.page = Some(value()?),
             "--markup" => cli.markup = Some(value()?),
+            "--script" => cli.script = Some(value()?),
             "--theme" => cli.theme = Some(value()?),
             "--debug" => cli.debug = true,
             "--help" | "-h" => {
@@ -139,6 +142,7 @@ fn main() {
     let debug = cli.debug;
     let start_page = cli.page.as_deref().and_then(state::Page::parse);
     let start_markup = cli.markup.clone();
+    let start_script = cli.script.clone();
     // Required on Windows for the task-tab WebView (an OS child window) to
     // composite inside a GPUI window; same setting gpui-component's own
     // webview example uses.
@@ -166,7 +170,7 @@ fn main() {
                 let view = cx.new(move |cx| {
                     OkApp::new(
                         client, queue, prefs, min_width, min_height, debug, start_page,
-                        start_markup.clone(), cx,
+                        start_markup.clone(), start_script.clone(), cx,
                     )
                 });
                 cx.new(|cx| Root::new(view, window, cx))

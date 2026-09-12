@@ -138,6 +138,8 @@ pub struct OkApp {
     pub close_guard_installed: bool,
     /// Template image to open in the markup editor right after the first snapshot.
     pub start_markup: Option<String>,
+    /// Script to open in the editor right after the first snapshot.
+    pub start_script: Option<String>,
     pub last_task_poll: Instant,
     pub last_log_poll: Instant,
     pub last_script_poll: Instant,
@@ -162,6 +164,7 @@ impl OkApp {
         debug: bool,
         start_page: Option<Page>,
         start_markup: Option<String>,
+        start_script: Option<String>,
         cx: &mut Context<Self>,
     ) -> Self {
         let language = prefs.language.clone();
@@ -210,6 +213,7 @@ impl OkApp {
             save_to: crate::modals::SaveToState::default(),
             close_guard_installed: false,
             start_markup: start_markup.clone(),
+            start_script: start_script.clone(),
             last_task_poll: Instant::now(),
             last_log_poll: Instant::now(),
             last_script_poll: Instant::now(),
@@ -242,6 +246,12 @@ impl OkApp {
             if self.state.templates.iter().any(|item| item.name == name) {
                 self.start_markup = None;
                 self.open_markup(name, cx);
+            }
+        }
+        if let Some(name) = self.start_script.clone() {
+            if self.state.scripts.iter().any(|item| item.name == name) {
+                self.start_script = None;
+                self.open_script(&name, cx);
             }
         }
         let polled = self.poll_endpoints(cx);
