@@ -34,6 +34,9 @@ class WebTabConfig:
     position: Literal["scroll", "bottom"] = "scroll"
     add_after_default_tabs: bool = True
     task_controls: bool = True
+    # Optional native control tree for UI adapters that cannot run the browser
+    # module (the GPUI client renders it instead of hosting a WebView).
+    gpui_view: dict | None = None
 
     def __post_init__(self) -> None:
         if not _TAB_ID.fullmatch(self.id):

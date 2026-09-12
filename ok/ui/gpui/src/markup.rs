@@ -269,11 +269,23 @@ impl OkApp {
     }
 
     fn markup_ensure_view(&mut self, width: f64, height: f64) {
-        if self.markup.view_for.as_deref() != Some(self.markup.image.as_str()) {
+        // Until the image decodes (or the annotation document arrives) the size
+        // is unknown and `markup_image_size` reports a 1x1 placeholder: never
+        // store that as the view, otherwise the boxes are laid out in a
+        // nonsense coordinate space (scale = viewport height).
+        if width <= 1.0 && height <= 1.0 {
+            return;
+        }
+        let changed_image =
+            self.markup.view_for.as_deref() != Some(self.markup.image.as_str());
+        let placeholder = self.markup.view[2] <= 1.0 && self.markup.view[3] <= 1.0;
+        if changed_image
+            || placeholder
+            || self.markup.view[2] > width * 1.5
+            || self.markup.view[3] > height * 1.5
+        {
             self.markup.view = [0.0, 0.0, width, height];
             self.markup.view_for = Some(self.markup.image.clone());
-        } else if self.markup.view[2] > width * 1.5 || self.markup.view[3] > height * 1.5 {
-            self.markup.view = [0.0, 0.0, width, height];
         }
     }
 

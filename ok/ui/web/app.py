@@ -39,7 +39,7 @@ class RegisteredTaskTab:
 
     def manifest(self):
         spec = self.specification
-        return {
+        manifest = {
             "id": spec.id,
             "name": spec.name,
             "icon": spec.icon,
@@ -50,6 +50,11 @@ class RegisteredTaskTab:
             "task_class_name": self.task.__class__.__name__,
             "module_url": f"/task-tabs/{spec.id}/assets/{spec.entrypoint}",
         }
+        # Only present when a tab ships a native control tree; the browser
+        # contract is unchanged for every other tab.
+        if spec.gpui_view is not None:
+            manifest["gpui_view"] = spec.gpui_view
+        return manifest
 
 
 def register_task_tabs(tasks):

@@ -397,7 +397,20 @@ impl OkApp {
                 .map(std::path::PathBuf::from)
                 .map(|home| home.join("Downloads"))
                 .unwrap_or_else(std::env::temp_dir);
-            let file = directory.join("ok-script-tasks.okscript");
+            let file_name = self
+                .input_values
+                .get("export-file-name")
+                .map(|name| name.trim())
+                .filter(|name| !name.is_empty())
+                .map(|name| {
+                    if name.ends_with(".okscript") {
+                        name.to_owned()
+                    } else {
+                        format!("{name}.okscript")
+                    }
+                })
+                .unwrap_or_else(|| "ok-script-tasks.okscript".to_owned());
+            let file = directory.join(file_name);
             match std::fs::write(&file, bytes) {
                 Ok(()) => self.toast(
                     ToastKind::Success,
