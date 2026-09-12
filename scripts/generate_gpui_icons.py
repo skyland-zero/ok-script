@@ -226,11 +226,16 @@ def main() -> int:
             "/// frontend renders via `@fluentui/react-icons`.",
             "pub static ICONS: &[(&str, &[u8])] = &[",
         ]
-        for name in sorted(written):
+        vendored = sorted(
+            entry
+            for entry in os.listdir(args.out)
+            if entry.endswith(".svg")
+        )
+        for name in vendored:
             lines.append(
                 '    ("icons/ok/%s", include_bytes!("../assets/icons/ok/%s")),' % (name, name)
             )
-        lines.append("]")
+        lines.append("];")
         lines.append("")
         with open(args.table, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines))

@@ -5,12 +5,12 @@
 //! markup it mirrors.
 
 use gpui::{
-    div, prelude::*, px, AnyElement, App, BoxShadow, ClickEvent, Context, Div, ElementId,
-    FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window,
+    div, prelude::*, px, AnyElement, App, BoxShadow, ClickEvent, Div, ElementId, FontWeight, Hsla,
+    IntoElement, ParentElement, SharedString, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
-    ActiveTheme as _, Disableable as _, Icon, Sizable as _, StyledExt as _,
+    ActiveTheme as _, Disableable as _, Icon, StyledExt as _,
 };
 
 use crate::icons::OkIcon;

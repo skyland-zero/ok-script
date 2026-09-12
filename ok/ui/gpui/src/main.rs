@@ -7,15 +7,20 @@
 mod api;
 mod app;
 mod assets;
+mod brand_icons;
 mod components;
 mod i18n;
 mod icons;
 mod icons_data;
 mod images;
+mod markup;
 mod model;
 mod modals;
 mod pages;
+mod schedule_dialog;
+mod script;
 mod state;
+mod task_tab;
 mod theme;
 
 use std::collections::VecDeque;
@@ -38,6 +43,8 @@ struct Cli {
     debug: bool,
     locale: Option<String>,
     theme: Option<String>,
+    page: Option<String>,
+    markup: Option<String>,
 }
 
 impl Default for Cli {
@@ -51,6 +58,8 @@ impl Default for Cli {
             debug: false,
             locale: None,
             theme: None,
+            page: None,
+            markup: None,
         }
     }
 }
@@ -71,12 +80,16 @@ fn parse_cli() -> Result<Cli, String> {
                 cli.min_height = value()?.parse().map_err(|_| "invalid --min-height")?
             }
             "--locale" => cli.locale = Some(value()?),
+            "--page" => cli.page = Some(value()?),
+            "--markup" => cli.markup = Some(value()?),
             "--theme" => cli.theme = Some(value()?),
             "--debug" => cli.debug = true,
             "--help" | "-h" => {
                 println!(
                     "ok-script-gpui --url URL [--width N] [--height N] [--min-width N] \
-                     [--min-height N] [--locale xx_XX] [--theme Light|Dark|Auto] [--debug]"
+                     [--min-height N] [--locale xx_XX] [--theme Light|Dark|Auto] \
+                     [--page Capture|Tasks|Script|Templates|Schedule|Settings|Notifications|About] \
+                     [--debug]"
                 );
                 std::process::exit(0);
             }
@@ -124,6 +137,14 @@ fn main() {
     let min_width = cli.min_width;
     let min_height = cli.min_height;
     let debug = cli.debug;
+    let start_page = cli.page.as_deref().and_then(state::Page::parse);
+    let start_markup = cli.markup.clone();
+    // Required on Windows for the task-tab WebView (an OS child window) to
+    // composite inside a GPUI window; same setting gpui-component's own
+    // webview example uses.
+    #[cfg(target_os = "windows")]
+    std::env::set_var("GPUI_DISABLE_DIRECT_COMPOSITION", "true");
+
     let app = Application::new().with_assets(Assets);
     app.run(move |cx| {
         gpui_component::init(cx);
@@ -143,7 +164,10 @@ fn main() {
                 let queue = queue.clone();
                 let prefs = prefs.clone();
                 let view = cx.new(move |cx| {
-                    OkApp::new(client, queue, prefs, min_width, min_height, debug, cx)
+                    OkApp::new(
+                        client, queue, prefs, min_width, min_height, debug, start_page,
+                        start_markup.clone(), cx,
+                    )
                 });
                 cx.new(|cx| Root::new(view, window, cx))
             },

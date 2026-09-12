@@ -2,7 +2,7 @@
 //! script/template dialogs.
 
 use gpui::{
-    div, img, prelude::*, px, AnyElement, Context, ElementId, FontWeight, IntoElement, ObjectFit,
+    div, img, prelude::*, px, AnyElement, Context, ElementId, IntoElement, ObjectFit,
     ParentElement, SharedString, Styled, Window,
 };
 use gpui_component::{button::Button, input::Input, ActiveTheme as _, Disableable as _, StyledExt as _};
@@ -14,6 +14,23 @@ use crate::components as ui;
 use crate::i18n::{self, t};
 use crate::icons::OkIcon;
 use crate::theme::Tokens;
+
+/// Save-To dialog state (destination, label-enum generation, enum path).
+pub struct SaveToState {
+    pub destination: String,
+    pub generate_label_enum: bool,
+    pub enum_path: String,
+}
+
+impl Default for SaveToState {
+    fn default() -> Self {
+        Self {
+            destination: "tasks".to_owned(),
+            generate_label_enum: false,
+            enum_path: "ok_tasks/LabelEnum.py".to_owned(),
+        }
+    }
+}
 
 impl OkApp {
     pub fn render_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -41,6 +58,9 @@ impl OkApp {
             } => self.modal_list_editor(target, field, selected, active, draft, window, cx),
             Modal::CreateScript => self.modal_create_script(window, cx),
             Modal::RecordScript => self.modal_record_script(cx),
+            Modal::TemplateSaveTo => self.modal_save_to(window, cx),
+            Modal::Markup => self.render_markup(window, cx),
+            Modal::ScheduleEditor { .. } => self.render_schedule_dialog(window, cx),
             other => self.modal_placeholder(other, cx),
         };
         div()
@@ -59,7 +79,7 @@ impl OkApp {
             .into_any_element()
     }
 
-    fn close_button(&self, id: &'static str, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn close_button(&self, id: &'static str, cx: &mut Context<Self>) -> AnyElement {
         ui::icon_button(id, OkIcon::Close, cx)
             .on_click(cx.listener(|view, _, _, cx| {
                 view.modal = None;
@@ -360,6 +380,7 @@ impl OkApp {
                                 ui::secondary_button("unsaved-discard", t("Don't Save"), cx)
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         view.state.script_dirty = false;
+                                        view.task_tab.dirty = false;
                                         view.modal = None;
                                         if let Some(page) = pending.clone() {
                                             view.pending_page = None;
@@ -373,6 +394,7 @@ impl OkApp {
                                 ui::primary_button("unsaved-save", t("Save"))
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.save_script(cx);
+                                        view.save_task_tab(cx);
                                         view.state.script_dirty = false;
                                         view.modal = None;
                                         if let Some(page) = view.pending_page.clone() {
@@ -751,6 +773,127 @@ impl OkApp {
                                     cx.notify();
                                 }
                             })),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn modal_save_to(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let destination = self.save_to.destination.clone();
+        let generate = self.save_to.generate_label_enum;
+        let enum_path = self.save_to.enum_path.clone();
+        let busy = self.state.is_busy();
+        let path_input = if generate {
+            Some(self.ensure_input(
+                window,
+                cx,
+                "save-to-enum-path",
+                &t("Relative path, e.g. ok_tasks/LabelEnum.py"),
+                &enum_path,
+                false,
+            ))
+        } else {
+            None
+        };
+
+        let mut destination_rows = div().v_flex().gap_1();
+        for (value, label) in [
+            ("tasks", t("ok_tasks/assets (custom scripts)")),
+            ("assets", t("assets (standalone app)")),
+        ] {
+            let selected = destination == value;
+            let value_owned = value.to_owned();
+            destination_rows = destination_rows.child(
+                div()
+                    .id(ElementId::Name(SharedString::from(format!(
+                        "save-destination-{value}"
+                    ))))
+                    .h_flex()
+                    .items_center()
+                    .gap_2()
+                    .px(px(10.0))
+                    .py(px(7.0))
+                    .rounded(px(ui::BUTTON_RADIUS))
+                    .text_size(px(ui::FS_BODY))
+                    .cursor_pointer()
+                    .when(selected, |this| this.bg(cx.theme().list_active))
+                    .hover(|style| style.bg(gpui::rgba(0xffffff11)))
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.save_to.destination = value_owned.clone();
+                        cx.notify();
+                    }))
+                    .child(
+                        div()
+                            .size(px(10.0))
+                            .flex_none()
+                            .rounded_full()
+                            .bg(if selected {
+                                cx.theme().accent
+                            } else {
+                                gpui::rgba(0xffffff33).into()
+                            }),
+                    )
+                    .child(label),
+            );
+        }
+
+        let body = ui::modal_body()
+            .child(destination_rows)
+            .child(
+                gpui_component::checkbox::Checkbox::new("save-generate-enum")
+                    .checked(generate)
+                    .label(t("Generate label enum file"))
+                    .on_click(cx.listener(|view, checked, _, cx| {
+                        view.save_to.generate_label_enum = *checked;
+                        cx.notify();
+                    })),
+            )
+            .when_some(path_input, |this, input| this.child(Input::new(&input)));
+
+        div()
+            .id("modal-content")
+            .on_click(|_, _, _| {})
+            .child(
+                ui::modal_frame(520.0, cx)
+                    .child(
+                        ui::modal_header(t("Save To"), cx)
+                            .child(self.close_button("save-to-close", cx)),
+                    )
+                    .child(body)
+                    .child(
+                        ui::modal_footer()
+                            .child(
+                                ui::secondary_button("save-to-cancel", t("Cancel"), cx)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.modal = None;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                ui::primary_button("save-to-ok", t("OK"))
+                                    .disabled(busy)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        let destination = view.save_to.destination.clone();
+                                        let generate = view.save_to.generate_label_enum;
+                                        let enum_path = view
+                                            .input_values
+                                            .get("save-to-enum-path")
+                                            .cloned()
+                                            .unwrap_or_else(|| {
+                                                view.save_to.enum_path.clone()
+                                            });
+                                        view.modal = None;
+                                        view.post(
+                                            "/api/templates/save",
+                                            Some(serde_json::json!({
+                                                "destination": destination,
+                                                "generate_label_enum": generate,
+                                                "enum_path": enum_path,
+                                            })),
+                                            cx,
+                                        );
+                                    })),
+                            ),
                     ),
             )
             .into_any_element()

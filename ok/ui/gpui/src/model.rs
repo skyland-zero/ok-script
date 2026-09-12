@@ -389,6 +389,14 @@ pub struct ScheduledTask {
     #[serde(default)]
     pub interval_hours: i64,
     #[serde(default)]
+    pub start_hour: Option<i64>,
+    #[serde(default)]
+    pub start_minute: Option<i64>,
+    #[serde(default)]
+    pub timeout_hours: Option<i64>,
+    #[serde(default)]
+    pub auto_exit: Option<bool>,
+    #[serde(default)]
     pub read_only: bool,
 }
 

@@ -13,7 +13,7 @@ use std::{
 };
 
 use reqwest::blocking::Client;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use tungstenite::{connect, Message};
 
@@ -29,6 +29,8 @@ impl ApiClient {
     pub fn new(base_url: String) -> Result<Self, String> {
         let base_url = base_url.trim_end_matches('/').to_owned();
         let http = Client::builder()
+            // The backend is always local; never route it through a system proxy.
+            .no_proxy()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(120))
             .build()
@@ -36,11 +38,12 @@ impl ApiClient {
         Ok(Self { base_url, http })
     }
 
-    pub fn base_url(&self) -> &str {
-        &self.base_url
-    }
-
     pub fn url(&self, path: &str) -> String {
+        if path.starts_with("http://") || path.starts_with("https://") {
+            // Callers may already hold an absolute URL (image resources report
+            // them that way); never prefix those twice.
+            return path.to_owned();
+        }
         if path.starts_with('/') {
             format!("{}{}", self.base_url, path)
         } else {
@@ -416,7 +419,3 @@ pub fn run_events(client: Arc<ApiClient>, queue: Arc<Mutex<VecDeque<Update>>>) {
     });
 }
 
-/// Serialize an arbitrary value for `POST` bodies.
-pub fn to_body<T: Serialize>(value: &T) -> Option<Value> {
-    serde_json::to_value(value).ok()
-}

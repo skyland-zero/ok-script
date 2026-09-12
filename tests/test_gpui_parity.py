@@ -141,7 +141,7 @@ def test_every_native_glyph_declares_its_fluent_origin():
         stripped = line.strip()
         if line.startswith("    ") and not line.startswith("        ") and ' => "' in line:
             variants.add(stripped.split(" => ")[0])
-        if stripped.startswith("Self::") and "20Regular" in stripped:
+        if stripped.startswith("Self::") and ("20Regular" in stripped or "Mark" in stripped):
             declared.add(stripped.split("::", 1)[1].split(" =>", 1)[0])
     assert variants, "no icon variants declared"
     assert variants == declared, sorted(variants ^ declared)

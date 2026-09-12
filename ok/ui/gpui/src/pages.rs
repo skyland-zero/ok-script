@@ -6,7 +6,7 @@ use gpui::{
     ParentElement, SharedString, Styled, Window,
 };
 use gpui_component::{
-    button::Button, input::Input, ActiveTheme as _, Disableable as _, Sizable as _, StyledExt as _,
+    input::Input, ActiveTheme as _, Disableable as _, StyledExt as _,
 };
 use serde_json::{json, Value};
 
@@ -16,9 +16,8 @@ use crate::components as ui;
 use crate::i18n::{self, t};
 use crate::icons::OkIcon;
 use crate::model::*;
-use crate::state::{classify, elapsed_text, Page};
+use crate::state::elapsed_text;
 use crate::theme::Tokens;
-use crate::tr;
 
 impl OkApp {
     // ------------------------------------------------------------- Capture page
@@ -303,6 +302,44 @@ impl OkApp {
             )
             .child(ui::section_title(t("Debug"), cx))
             .child(ui::card(cx).p(px(16.0)).child(tools))
+            .into_any_element()
+    }
+
+    /// `.app-avatar`: the application icon when the backend serves one,
+    /// otherwise the `OK` fallback badge.
+    pub fn app_avatar(&mut self, size: f32, font_size: f32, cx: &gpui::App) -> AnyElement {
+        let icon_url = self
+            .state
+            .capture
+            .icon_url
+            .clone()
+            .or_else(|| self.state.about.icon_url.clone());
+        if let Some(url) = icon_url {
+            let absolute = self.client.url(&url);
+            self.ensure_image(&absolute);
+            if let Some(image) = self.images.get(&absolute).cloned() {
+                return div()
+                    .size(px(size))
+                    .flex_none()
+                    .rounded_full()
+                    .overflow_hidden()
+                    .bg(cx.theme().accent)
+                    .child(img(image).size_full().object_fit(ObjectFit::Contain))
+                    .into_any_element();
+            }
+        }
+        div()
+            .grid()
+            .items_center()
+            .justify_center()
+            .size(px(size))
+            .flex_none()
+            .rounded_full()
+            .bg(cx.theme().accent)
+            .text_color(gpui::rgb(0x102a35))
+            .text_size(px(font_size))
+            .font_weight(FontWeight::BOLD)
+            .child("OK")
             .into_any_element()
     }
 
@@ -1278,12 +1315,25 @@ impl OkApp {
                 .justify_between()
                 .child(ui::page_title(t("Schedule"), cx))
                 .child(
-                    ui::secondary_button("schedule-refresh", t("Refresh"), cx)
-                        .icon(OkIcon::Refresh.icon())
-                        .disabled(busy)
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.get("/api/schedule", cx);
-                        })),
+                    div()
+                        .h_flex()
+                        .gap_2()
+                        .child(
+                            ui::secondary_button("schedule-refresh", t("Refresh"), cx)
+                                .icon(OkIcon::Refresh.icon())
+                                .disabled(busy)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.get("/api/schedule", cx);
+                                })),
+                        )
+                        .child(
+                            ui::secondary_button("schedule-create", t("Create Task"), cx)
+                                .icon(OkIcon::Add.icon())
+                                .disabled(busy || self.state.schedule.available_tasks.is_empty())
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.open_schedule_editor(None, cx);
+                                })),
+                        ),
                 ),
         );
         if tasks.is_empty() {
@@ -1380,6 +1430,22 @@ impl OkApp {
                                 .child(
                                     ui::secondary_button(
                                         ElementId::Name(SharedString::from(format!(
+                                            "schedule-modify-{encoded}"
+                                        ))),
+                                        t("Modify"),
+                                        cx,
+                                    )
+                                    .disabled(busy || read_only)
+                                    .on_click(cx.listener({
+                                        let name = name.clone();
+                                        move |view, _, _, cx| {
+                                            view.open_schedule_editor(Some(name.clone()), cx);
+                                        }
+                                    })),
+                                )
+                                .child(
+                                    ui::secondary_button(
+                                        ElementId::Name(SharedString::from(format!(
                                             "schedule-delete-{encoded}"
                                         ))),
                                         t("Delete"),
@@ -1422,62 +1488,80 @@ impl OkApp {
     pub fn render_about(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let about = self.state.about.clone();
         let busy = self.state.is_busy();
-        let mut page = ui::page_root("about-page")
-            .child(ui::page_title(if about.title.is_empty() {
-                "ok-script".to_owned()
-            } else {
-                about.title.clone()
-            }, cx))
-            .child(ui::muted_text(
-                format!(
-                    "{} · {}",
-                    if about.version.is_empty() {
-                        "dev".to_owned()
-                    } else {
-                        about.version.clone()
-                    },
-                    if about.debug {
-                        t("Debug")
-                    } else {
-                        t("Release")
-                    }
+        let avatar = self.app_avatar(40.0, 14.0, cx);
+        let mut page = ui::page_root("about-page").child(
+            div()
+                .h_flex()
+                .items_center()
+                .gap_3()
+                .child(avatar)
+                .child(
+                    div()
+                        .v_flex()
+                        .gap(px(2.0))
+                        .child(ui::page_title(
+                            if about.title.is_empty() {
+                                "ok-script".to_owned()
+                            } else {
+                                about.title.clone()
+                            },
+                            cx,
+                        ))
+                        .child(ui::muted_text(
+                            format!(
+                                "{} · {}",
+                                if about.version.is_empty() {
+                                    "dev".to_owned()
+                                } else {
+                                    about.version.clone()
+                                },
+                                if about.debug {
+                                    t("Debug")
+                                } else {
+                                    t("Release")
+                                }
+                            ),
+                            cx,
+                        )),
                 ),
-                cx,
-            ));
+        );
 
-        for (key, label) in [
-            ("github", "GitHub"),
-            ("download", "Download"),
-            ("discord", "Discord"),
-            ("qq_group", "QQ群"),
-            ("qq_channel", "QQ频道"),
-            ("faq", "FAQ"),
-            ("sponsor", "Sponsor"),
-        ] {
-            let Some(url) = about_link(&about.links, key) else {
+        let mut links = div().h_flex().gap_2().flex_wrap();
+        for (key, label, icon) in crate::brand_icons::ABOUT_LINK_ORDER {
+            let Some(url) = crate::brand_icons::link_url(&about.links, key, i18n::locale()) else {
                 continue;
             };
-            page = page.child(
-                ui::card(cx).p(px(12.0)).child(
-                    div()
-                        .h_flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_size(px(ui::FS_BODY))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(label),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(ui::FS_TINY))
-                                .text_color(cx.theme().accent)
-                                .child(url),
-                        ),
-                ),
+            let is_share = key == "share";
+            let url_for_click = url.clone();
+            links = links.child(
+                ui::secondary_button(
+                    ElementId::Name(SharedString::from(format!("about-link-{key}"))),
+                    label,
+                    cx,
+                )
+                .icon(icon.icon())
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    if is_share {
+                        match &url_for_click {
+                            url if !url.is_empty() => {
+                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(url.clone()));
+                                view.toast(
+                                    crate::model::ToastKind::Success,
+                                    t("Share Link copied to clipboard"),
+                                );
+                            }
+                            _ => view.toast(
+                                crate::model::ToastKind::Error,
+                                t("Action failed"),
+                            ),
+                        }
+                    } else {
+                        cx.open_url(&url_for_click);
+                    }
+                })),
             );
         }
+        page = page.child(links);
 
         if about.update_supported {
             let current = about.version.clone();
@@ -1591,7 +1675,7 @@ impl OkApp {
                         div()
                             .text_size(px(ui::FS_SMALL))
                             .text_color(cx.theme().muted_foreground)
-                            .child(about.about.clone()),
+                            .child(crate::brand_icons::html_to_text(&about.about)),
                     ),
                 );
         }
@@ -1630,260 +1714,6 @@ impl OkApp {
     }
 
     // --------------------------------------------------------- script/templates
-
-    pub fn render_script(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let busy = self.state.is_busy();
-        let mut page = ui::page_root("script-page")
-            .child(ui::page_title(t("Script"), cx));
-
-        let mut list = ui::card(cx).gap_2().p(px(16.0));
-        list = list.child(
-            div()
-                .h_flex()
-                .w_full()
-                .items_center()
-                .justify_between()
-                .child(ui::section_title(t("Choose Task:"), cx))
-                .child(
-                    div()
-                        .h_flex()
-                        .gap_2()
-                        .child(
-                            ui::secondary_button("script-create", t("Create Task"), cx)
-                                .icon(OkIcon::Add.icon())
-                                .disabled(busy)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.modal = Some(Modal::CreateScript);
-                                    cx.notify();
-                                })),
-                        )
-                        .child(if self.script_recording {
-                            ui::primary_button("script-stop-record", t("Stop"))
-                                .icon(OkIcon::Stop.icon())
-                                .disabled(busy)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    let code = view.current_script_code_public(cx);
-                                    let loop_mode = view
-                                        .input_values
-                                        .get("record-loop")
-                                        .cloned()
-                                        .unwrap_or_else(|| "none".to_owned());
-                                    view.post(
-                                        "/api/scripts-record/stop",
-                                        Some(json!({
-                                            "code": code,
-                                            "loop": loop_mode,
-                                            "count": 10,
-                                        })),
-                                        cx,
-                                    );
-                                }))
-                                .into_any_element()
-                        } else {
-                            ui::secondary_button("script-record", t("Record"), cx)
-                                .icon(OkIcon::Record.icon())
-                                .disabled(busy)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.modal = Some(Modal::RecordScript);
-                                    cx.notify();
-                                }))
-                                .into_any_element()
-                        }),
-                ),
-        );
-        if self.state.scripts.is_empty() {
-            list = list.child(ui::muted_text(t("No options available"), cx));
-        }
-        for script in self.state.scripts.clone() {
-            let name = script.name.clone();
-            let encoded = api::url_encode(&name);
-            let selected = self.script_open.as_deref() == Some(name.as_str());
-            list = list.child(
-                div()
-                    .h_flex()
-                    .w_full()
-                    .items_center()
-                    .justify_between()
-                    .gap_2()
-                    .px(px(8.0))
-                    .py(px(6.0))
-                    .rounded(px(6.0))
-                    .when(selected, |this| this.bg(cx.theme().list_active))
-                    .child(
-                        div()
-                            .id(ElementId::Name(SharedString::from(format!(
-                                "script-{encoded}"
-                            ))))
-                            .flex_1()
-                            .cursor_pointer()
-                            .text_size(px(ui::FS_BODY))
-                            .on_click(cx.listener({
-                                let name = name.clone();
-                                move |view, _, _, cx| {
-                                    view.open_script(&name, cx);
-                                }
-                            }))
-                            .child(i18n::t(&name)),
-                    )
-                    .child(
-                        div()
-                            .h_flex()
-                            .gap_2()
-                            .child(
-                                ui::secondary_button(
-                                    ElementId::Name(SharedString::from(format!(
-                                        "script-copy-{encoded}"
-                                    ))),
-                                    t("Copy Task"),
-                                    cx,
-                                )
-                                .disabled(busy)
-                                .on_click(cx.listener({
-                                    let path = format!("/api/scripts/{encoded}/copy");
-                                    move |view, _, _, cx| view.post(&path, None, cx)
-                                })),
-                            )
-                            .child(
-                                ui::secondary_button(
-                                    ElementId::Name(SharedString::from(format!(
-                                        "script-delete-{encoded}"
-                                    ))),
-                                    t("Delete Task"),
-                                    cx,
-                                )
-                                .disabled(busy)
-                                .on_click(cx.listener({
-                                    let name = name.clone();
-                                    move |view, _, _, cx| {
-                                        view.modal = Some(Modal::Confirm {
-                                            title: t("Confirm Delete"),
-                                            message: i18n::tv(
-                                                "Are you sure you want to delete '{name}'?",
-                                                &[("name", &name)],
-                                            ),
-                                            confirm_label: t("Delete"),
-                                            action: ConfirmAction::DeleteScript(name.clone()),
-                                        });
-                                        cx.notify();
-                                    }
-                                })),
-                            ),
-                    ),
-            );
-        }
-        page = page.child(list);
-
-        if self.script_open.is_some() {
-            let state = self.ensure_input(
-                window,
-                cx,
-                "script-editor",
-                "",
-                &self.state.script_code.clone(),
-                true,
-            );
-            page = page.child(
-                ui::card(cx)
-                    .gap_2()
-                    .p(px(12.0))
-                    .child(
-                        div()
-                            .h_flex()
-                            .w_full()
-                            .items_center()
-                            .justify_between()
-                            .child(ui::section_title(
-                                self.script_open.clone().unwrap_or_default(),
-                                cx,
-                            ))
-                            .child(
-                                div()
-                                    .h_flex()
-                                    .gap_2()
-                                    .child(
-                                        ui::secondary_button("script-save", t("Save"), cx)
-                                            .icon(OkIcon::Save.icon())
-                                            .disabled(busy)
-                                            .on_click(cx.listener(|view, _, _, cx| {
-                                                view.save_script(cx);
-                                            })),
-                                    )
-                                    .child(
-                                        ui::primary_button("script-run", t("Run"))
-                                            .icon(OkIcon::Play.icon())
-                                            .disabled(busy)
-                                            .on_click(cx.listener(|view, _, _, cx| {
-                                                view.run_script(cx);
-                                            })),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .w_full()
-                            .min_h(px(420.0))
-                            .child(
-                                Input::new(&state)
-                                    .h_full()
-                                    .bordered(false)
-                                    .disabled(busy),
-                            ),
-                    ),
-            );
-            if let Some(error) = &self.state.script_error {
-                page = page.child(
-                    ui::card(cx).p(px(12.0)).child(
-                        div()
-                            .text_size(px(ui::FS_TINY))
-                            .text_color(cx.theme().danger)
-                            .child(error.clone()),
-                    ),
-                );
-            }
-        }
-        page.into_any_element()
-    }
-
-    pub fn open_script(&mut self, name: &str, cx: &mut Context<Self>) {
-        self.script_open = Some(name.to_owned());
-        self.state.script_error = None;
-        self.get(&format!("/api/scripts/{}", api::url_encode(name)), cx);
-    }
-
-    pub fn save_script(&mut self, cx: &mut Context<Self>) {
-        let Some(name) = self.script_open.clone() else {
-            return;
-        };
-        let code = self.current_script_code(cx);
-        self.post(
-            &format!("/api/scripts/{}", api::url_encode(&name)),
-            Some(json!({ "code": code })),
-            cx,
-        );
-    }
-
-    pub fn run_script(&mut self, cx: &mut Context<Self>) {
-        let Some(name) = self.script_open.clone() else {
-            return;
-        };
-        let code = self.current_script_code(cx);
-        self.post(
-            &format!("/api/scripts/{}/run", api::url_encode(&name)),
-            Some(json!({ "code": code })),
-            cx,
-        );
-    }
-
-    pub fn current_script_code_public(&self, cx: &Context<Self>) -> String {
-        self.current_script_code(cx)
-    }
-
-    fn current_script_code(&self, cx: &Context<Self>) -> String {
-        self.inputs
-            .get("script-editor")
-            .map(|state| state.read(cx).value().to_string())
-            .unwrap_or_else(|| self.state.script_code.clone())
-    }
 
     pub fn render_templates(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let busy = self.state.is_busy();
@@ -1926,9 +1756,27 @@ impl OkApp {
                                     view.post("/api/templates/capture", None, cx);
                                 })),
                         )
+                        .child(
+                            ui::secondary_button("template-save", t("Save"), cx)
+                                .icon(OkIcon::Save.icon())
+                                .disabled(busy)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.modal = Some(Modal::TemplateSaveTo);
+                                    cx.notify();
+                                })),
+                        )
                         .when_some(selected.clone(), |this, name| {
                             let encoded = api::url_encode(&name);
                             this.child(
+                                ui::secondary_button("template-markup", t("Markup"), cx)
+                                    .icon(OkIcon::Edit.icon())
+                                    .disabled(busy)
+                                    .on_click(cx.listener({
+                                        let name = name.clone();
+                                        move |view, _, _, cx| view.open_markup(name.clone(), cx)
+                                    })),
+                            )
+                            .child(
                                 ui::secondary_button("template-delete", t("Delete"), cx)
                                     .icon(OkIcon::Delete.icon())
                                     .disabled(busy)
@@ -2020,39 +1868,7 @@ impl OkApp {
         page.child(grid).into_any_element()
     }
 
-    pub fn render_task_tab(
-        &mut self,
-        id: &str,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let tab = self
-            .state
-            .navigation
-            .task_tabs
-            .iter()
-            .find(|tab| tab.id == id)
-            .cloned();
-        let title = tab
-            .as_ref()
-            .map(|tab| tab.name.clone())
-            .unwrap_or_else(|| id.to_owned());
-        let has_native_view = tab
-            .as_ref()
-            .and_then(|tab| tab.gpui_view.as_ref())
-            .is_some();
-        ui::page_root("task-tab-page")
-            .child(ui::page_title(i18n::t(&title), cx))
-            .child(ui::card(cx).p(px(16.0)).child(ui::muted_text(
-                if has_native_view {
-                    "Rendering the manifest control tree is not implemented yet."
-                } else {
-                    "This task tab exposes Web assets only."
-                },
-                cx,
-            )))
-            .into_any_element()
-    }
+
 }
 
 fn target_is_integer(target: &ConfigTarget) -> bool {

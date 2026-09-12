@@ -96,6 +96,30 @@ pub enum Page {
 }
 
 impl Page {
+    /// Parse a page key as used by `--page` (`Group:Foo`, `task-tab:bar`, ...).
+    pub fn parse(value: &str) -> Option<Page> {
+        let trimmed = value.trim();
+        if let Some(name) = trimmed.strip_prefix("group:") {
+            return Some(Page::Group(name.to_owned()));
+        }
+        if let Some(id) = trimmed.strip_prefix("task-tab:") {
+            return Some(Page::TaskTab(id.to_owned()));
+        }
+        Some(match trimmed.to_ascii_lowercase().as_str() {
+            "capture" => Page::Capture,
+            "triggers" => Page::Triggers,
+            "tasks" => Page::Tasks,
+            "script" => Page::Script,
+            "templates" => Page::Templates,
+            "schedule" => Page::Schedule,
+            "settings" => Page::Settings,
+            "notifications" => Page::Notifications,
+            "about" => Page::About,
+            "" => return None,
+            other => Page::SettingsGroup(other.to_owned()),
+        })
+    }
+
     pub fn key(&self) -> String {
         match self {
             Self::Capture => "Capture".into(),
@@ -495,6 +519,11 @@ pub struct Inputs {
 impl Inputs {
     pub fn get(&self, key: &str) -> Option<gpui::Entity<gpui_component::input::InputState>> {
         self.values.get(key).cloned()
+    }
+
+    /// Drop a cached input so the next render recreates it from a new default.
+    pub fn forget(&mut self, key: &str) {
+        self.values.remove(key);
     }
 
     pub fn insert(

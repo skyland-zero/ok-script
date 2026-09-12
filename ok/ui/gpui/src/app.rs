@@ -9,7 +9,7 @@ use gpui::{
     div, prelude::*, px, AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, IntoElement,
     ParentElement, Render, SharedString, Styled, Window, WindowAppearance,
 };
-use gpui_component::{ActiveTheme as _, StyledExt as _, Theme, ThemeMode};
+use gpui_component::{ActiveTheme as _, StyledExt as _, ThemeMode};
 use serde_json::{json, Value};
 
 use crate::api::{self, ApiClient};
@@ -64,6 +64,10 @@ pub enum Modal {
         seconds: i64,
     },
     TemplateSaveTo,
+    Markup,
+    ScheduleEditor {
+        name: Option<String>,
+    },
     ListEditor {
         target: ConfigTarget,
         field: TaskConfigField,
@@ -124,6 +128,16 @@ pub struct OkApp {
     pub open_select: Option<String>,
     pub input_values: std::collections::HashMap<String, String>,
     pub images: std::collections::HashMap<String, Arc<gpui::RenderImage>>,
+    /// Raw RGBA pixels per image URL (markup editor sampling).
+    pub pixels: std::collections::HashMap<String, Arc<image::RgbaImage>>,
+    pub markup: crate::markup::MarkupState,
+    pub script_ui: crate::script::ScriptUiState,
+    pub task_tab: crate::task_tab::TaskTabState,
+    pub schedule_form: crate::schedule_dialog::ScheduleForm,
+    pub save_to: crate::modals::SaveToState,
+    pub close_guard_installed: bool,
+    /// Template image to open in the markup editor right after the first snapshot.
+    pub start_markup: Option<String>,
     pub last_task_poll: Instant,
     pub last_log_poll: Instant,
     pub last_script_poll: Instant,
@@ -146,6 +160,8 @@ impl OkApp {
         min_width: f32,
         min_height: f32,
         debug: bool,
+        start_page: Option<Page>,
+        start_markup: Option<String>,
         cx: &mut Context<Self>,
     ) -> Self {
         let language = prefs.language.clone();
@@ -155,7 +171,7 @@ impl OkApp {
             queue,
             state: AppState::default(),
             prefs,
-            page: Page::Capture,
+            page: start_page.unwrap_or(Page::Capture),
             pending_page: None,
             collapsed: false,
             toasts: Vec::new(),
@@ -186,6 +202,14 @@ impl OkApp {
             open_select: None,
             input_values: std::collections::HashMap::new(),
             images: std::collections::HashMap::new(),
+            pixels: std::collections::HashMap::new(),
+            markup: crate::markup::MarkupState::default(),
+            script_ui: crate::script::ScriptUiState::default(),
+            task_tab: crate::task_tab::TaskTabState::default(),
+            schedule_form: crate::schedule_dialog::ScheduleForm::default(),
+            save_to: crate::modals::SaveToState::default(),
+            close_guard_installed: false,
+            start_markup: start_markup.clone(),
             last_task_poll: Instant::now(),
             last_log_poll: Instant::now(),
             last_script_poll: Instant::now(),
@@ -214,6 +238,12 @@ impl OkApp {
 
     fn tick(&mut self, cx: &mut Context<Self>) {
         let changed = self.drain_updates(cx);
+        if let Some(name) = self.start_markup.clone() {
+            if self.state.templates.iter().any(|item| item.name == name) {
+                self.start_markup = None;
+                self.open_markup(name, cx);
+            }
+        }
         let polled = self.poll_endpoints(cx);
         let expired = self.expire_toasts();
         if changed || polled || expired {
@@ -294,6 +324,8 @@ impl OkApp {
                 }
                 Update::Image { key, bytes } => {
                     if let Some(decoded) = crate::images::decode(&bytes) {
+                        self.pixels
+                            .insert(key.clone(), Arc::new(decoded.rgba));
                         self.images.insert(key, decoded.render);
                     }
                 }
@@ -344,10 +376,8 @@ impl OkApp {
                 }
             }
             "task_tab" => {
-                if let Some((tab_id, name, _payload)) = event.task_tab() {
-                    self.state
-                        .event_log
-                        .push(format!("task-tab:{tab_id}:{name}"));
+                if let Some((tab_id, name, payload)) = event.task_tab() {
+                    self.push_task_tab_event(&tab_id, &name, payload);
                 }
             }
             _ => {}
@@ -715,7 +745,10 @@ impl OkApp {
 
     pub fn navigate(&mut self, page: Page, cx: &mut Context<Self>) {
         let leaving_script = self.page == Page::Script && page != Page::Script;
-        if leaving_script && self.state.script_dirty {
+        let leaving_tab = matches!(self.page, Page::TaskTab(_)) && page != self.page;
+        if (leaving_script && self.state.script_dirty)
+            || (leaving_tab && self.task_tab_dirty())
+        {
             self.pending_page = Some(page);
             self.modal = Some(Modal::UnsavedScript);
             cx.notify();
@@ -725,6 +758,11 @@ impl OkApp {
     }
 
     pub fn set_page(&mut self, page: Page, cx: &mut Context<Self>) {
+        // A task tab owns an OS child window: it has to be hidden explicitly,
+        // GPUI does not clip it to the page area.
+        if matches!(self.page, Page::TaskTab(_)) && !matches!(page, Page::TaskTab(_)) {
+            self.hide_task_tab(cx);
+        }
         self.page = page;
         self.modal = None;
         cx.notify();
@@ -886,7 +924,10 @@ impl OkApp {
             Page::Triggers => self.render_task_list(TaskFilter::Triggers, window, cx),
             Page::Tasks => self.render_task_list(TaskFilter::Tasks, window, cx),
             Page::Group(name) => self.render_task_list(TaskFilter::Group(name), window, cx),
-            Page::Script => self.render_script(window, cx),
+            Page::Script => {
+                self.poll_script(window, cx);
+                self.render_script(window, cx)
+            }
             Page::Templates => self.render_templates(window, cx),
             Page::Schedule => self.render_schedule(window, cx),
             Page::Settings => self.render_settings(window, cx),
@@ -1069,6 +1110,28 @@ impl Render for OkApp {
             self.window_title = title;
         }
 
+        // `.beforeunload` equivalent: refuse to close while a script has
+        // unsaved edits, and offer the same three-way dialog instead.
+        if !self.close_guard_installed {
+            self.close_guard_installed = true;
+            let weak = cx.entity().downgrade();
+            window.on_window_should_close(cx, move |_window, cx| {
+                let dirty = weak
+                    .update(cx, |view, cx| {
+                        if view.state.script_dirty {
+                            view.modal = Some(Modal::UnsavedScript);
+                            view.pending_page = None;
+                            cx.notify();
+                            true
+                        } else {
+                            false
+                        }
+                    })
+                    .unwrap_or(false);
+                !dirty
+            });
+        }
+
         let sidebar = self.render_sidebar(cx);
         let content = self.render_content(window, cx);
         let modal = if self.modal.is_some() {
@@ -1093,29 +1156,3 @@ impl Render for OkApp {
     }
 }
 
-// Re-exported helpers used by page modules.
-pub use helpers::*;
-
-mod helpers {
-    use super::*;
-
-    pub fn task_state_text(task: &AutomationTask) -> String {
-        OkApp::task_state_text(task)
-    }
-
-    pub fn status_line(app: &OkApp, cx: &App) -> String {
-        app.status_line(cx)
-    }
-
-    pub fn elapsed(start: f64) -> String {
-        elapsed_text(start)
-    }
-
-    pub fn font_semibold() -> FontWeight {
-        FontWeight::SEMIBOLD
-    }
-
-    pub fn rgba(value: u32) -> Hsla {
-        gpui::rgba(value).into()
-    }
-}
