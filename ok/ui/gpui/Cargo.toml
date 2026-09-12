@@ -6,9 +6,13 @@ license = "Apache-2.0"
 description = "Native GPUI desktop shell for ok-script"
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", branch = "main", package = "gpui", default-features = false }
-gpui_platform = { git = "https://github.com/zed-industries/zed", branch = "main", package = "gpui_platform" }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+gpui = "0.2.2"
+gpui-component = { version = "0.5.1", features = ["webview"] }
+gpui-component-assets = "0.5.1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "ico", "webp"] }
+rust-i18n = "3"
+anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 tungstenite = "0.26"

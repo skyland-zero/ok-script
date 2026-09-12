@@ -1,3 +1,9 @@
+//! Serde models mirroring the shared ok-script Web API contract.
+//!
+//! Every struct here maps 1:1 onto a JSON payload produced by
+//! `ok/ui/web/app.py`; the web frontend's `web_src/src/types.ts` is the
+//! reference for field names.
+
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -76,6 +82,20 @@ pub struct CaptureUiState {
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
+pub struct SystemAccent {
+    #[serde(default)]
+    pub light: Option<String>,
+    #[serde(default)]
+    pub dark: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ThemeUiState {
+    #[serde(default)]
+    pub system_accent: Option<SystemAccent>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct TaskConfigField {
     #[serde(default)]
     pub key: String,
@@ -169,6 +189,9 @@ pub struct TaskTabManifest {
     pub task_class_name: String,
     #[serde(default)]
     pub module_url: String,
+    /// Optional native control tree. Only emitted by backends that opted in;
+    /// the web contract has no equivalent and the page falls back to a
+    /// WebView host when it is absent.
     #[serde(default)]
     pub gpui_view: Option<Value>,
 }
@@ -242,17 +265,49 @@ pub struct ScriptSummary {
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
+pub struct ScriptParameter {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub default: Option<String>,
+    #[serde(default)]
+    pub doc: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct ScriptTemplate {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
     pub template_name: String,
     #[serde(default)]
-    pub category: String,
+    pub params: Vec<ScriptParameter>,
     #[serde(default)]
     pub doc: String,
     #[serde(default)]
+    pub full_doc: String,
+    #[serde(default)]
+    pub return_type: String,
+    #[serde(default)]
+    pub is_property: bool,
+    #[serde(default)]
     pub class_name: String,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub is_static: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ScriptDocument {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub code: String,
+    #[serde(default)]
+    pub modified: f64,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -265,6 +320,38 @@ pub struct TemplateImage {
     pub modified: f64,
     #[serde(default)]
     pub categories: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, serde::Serialize)]
+pub struct TemplateAnnotation {
+    #[serde(default)]
+    pub id: Option<i64>,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub bbox: Vec<f64>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TemplateAnnotations {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub width: f64,
+    #[serde(default)]
+    pub height: f64,
+    #[serde(default)]
+    pub annotations: Vec<TemplateAnnotation>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct AvailableScheduleTask {
+    #[serde(default)]
+    pub index: i64,
+    #[serde(default)]
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -284,7 +371,23 @@ pub struct ScheduledTask {
     #[serde(default)]
     pub last_run_time: String,
     #[serde(default)]
+    pub last_result: String,
+    #[serde(default)]
+    pub actions: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub created_time: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub task_index: i64,
+    #[serde(default)]
+    pub task_identifier: String,
+    #[serde(default)]
+    pub interval_days: i64,
+    #[serde(default)]
+    pub interval_hours: i64,
     #[serde(default)]
     pub read_only: bool,
 }
@@ -292,9 +395,57 @@ pub struct ScheduledTask {
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct ScheduleData {
     #[serde(default)]
-    pub available_tasks: Vec<Value>,
+    pub available_tasks: Vec<AvailableScheduleTask>,
     #[serde(default)]
     pub tasks: Vec<ScheduledTask>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct UpdateVersion {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub notes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct UpdateCheckResult {
+    #[serde(default)]
+    pub current_version: String,
+    #[serde(default)]
+    pub versions: Vec<UpdateVersion>,
+    #[serde(default)]
+    pub update_available: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct UpdateApplyResult {
+    #[serde(default)]
+    pub accepted: bool,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub result: Value,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ActionResult {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub resource_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ScriptExportOptions {
+    #[serde(default)]
+    pub tasks: Vec<String>,
+    #[serde(default)]
+    pub manifest: Value,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -309,27 +460,91 @@ pub struct RuntimeEvent {
     pub ui: Option<CaptureUiState>,
 }
 
+impl RuntimeEvent {
+    /// `notification` payload: `[message, title, error, tray, show_tab, params]`.
+    pub fn notification(&self) -> Option<(String, Option<String>, bool, bool, Value)> {
+        if self.event != "notification" {
+            return None;
+        }
+        let message = self
+            .args
+            .first()
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let title = self
+            .args
+            .get(1)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .filter(|value| !value.is_empty());
+        let error = self.args.get(2).and_then(Value::as_bool).unwrap_or(false);
+        let tray = self.args.get(3).and_then(Value::as_bool).unwrap_or(false);
+        let params = self.args.get(5).cloned().unwrap_or(Value::Null);
+        Some((message, title, error, tray, params))
+    }
+
+    /// `task_tab` payload: `[tab_id, event_name, payload]`.
+    pub fn task_tab(&self) -> Option<(String, String, Value)> {
+        if self.event != "task_tab" {
+            return None;
+        }
+        let tab_id = self.args.first().and_then(Value::as_str)?.to_owned();
+        let name = self
+            .args
+            .get(1)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let payload = self.args.get(2).cloned().unwrap_or(Value::Null);
+        Some((tab_id, name, payload))
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ApiSnapshot {
     pub capture: CaptureUiState,
+    pub theme: ThemeUiState,
     pub tasks: Vec<AutomationTask>,
     pub settings: Vec<SettingsGroup>,
     pub navigation: NavigationCapabilities,
     pub about: AboutInfo,
-    pub logs: Option<LogResponse>,
     pub scripts: Vec<ScriptSummary>,
     pub script_templates: Vec<ScriptTemplate>,
     pub templates: Vec<TemplateImage>,
     pub schedule: ScheduleData,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToastKind {
+    Success,
+    Info,
+    Error,
+}
+
 #[derive(Debug)]
 pub enum Update {
     Snapshot(ApiSnapshot),
     Event(RuntimeEvent),
-    ActionFinished {
-        message: String,
-        snapshot: Option<ApiSnapshot>,
+    /// Successful read or write: the API returns the entity itself, so the
+    /// shell re-applies it by path instead of re-fetching whole state.
+    Value {
+        path: String,
+        value: Value,
+        message: Option<String>,
+        kind: Option<String>,
     },
-    Error(String),
+    Error {
+        path: Option<String>,
+        message: String,
+    },
+    Binary {
+        path: String,
+        bytes: Vec<u8>,
+    },
+    /// Decoded image payload for `key` (an API image URL).
+    Image {
+        key: String,
+        bytes: Vec<u8>,
+    },
 }

@@ -46,14 +46,24 @@ pip install --editable . --group default --group dev
 ```
 
 Add the `web`, `gpui`, `qt`, `adb`, or `ocr` group for the use case being developed.
-The GPUI crate is under `ok/ui/gpui` and tracks the Zed upstream `main` branch;
-`Cargo.lock` pins the currently selected upstream commit. The checked-in
-`rust-toolchain.toml` selects the nightly toolchain required by that upstream
-revision. Build it from the crate directory with:
+The GPUI client lives in `ok/ui/gpui` and is built on the published
+`gpui` 0.2.2 / `gpui-component` 0.5.1 crates (plus `gpui-component-assets` for
+component icons and `wry` for the `webview` feature used by task tabs), so the
+crate builds without tracking the Zed `main` branch. The checked-in
+`rust-toolchain.toml` selects the nightly toolchain those crates require. Build
+it from the crate directory with:
 
 ```bash
 cargo build --release --locked
 ```
+
+The native client renders exactly the Fluent System Icons the browser UI uses:
+they are vendored under `ok/ui/gpui/assets/icons/ok` and regenerated with
+`scripts/generate_gpui_icons.py` (`--source` points at the unpacked
+`@fluentui/react-icons` package). `tests/test_gpui_parity.py` keeps the two
+frontends aligned: every endpoint `web_src/src/api.ts` calls must be reachable
+from the native client, the translation catalog must stay identical, and every
+config field kind must have a native control.
 
 Either put the resulting `ok-script-gpui.exe` beside the Python executable or
 configure `gui.binary`/`OK_SCRIPT_GPUI_BINARY`.

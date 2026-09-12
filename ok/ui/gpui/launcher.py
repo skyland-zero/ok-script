@@ -66,6 +66,23 @@ def _window_args(config: dict) -> list[str]:
     return args
 
 
+def _ui_pref_args(config: dict) -> list[str]:
+    """Forward the application's UI language/theme preference to the client.
+
+    Both are optional: without them the native client keeps its own persisted
+    preference (the web frontend uses `localStorage` for the same purpose).
+    """
+    gui_config = config.get("gui") if isinstance(config.get("gui"), dict) else {}
+    args = []
+    language = gui_config.get("language") or config.get("language")
+    if language:
+        args.extend(("--locale", str(language)))
+    theme = gui_config.get("theme") or config.get("theme")
+    if theme:
+        args.extend(("--theme", str(theme)))
+    return args
+
+
 def _terminate_process(process: subprocess.Popen) -> None:
     if process.poll() is not None:
         return
@@ -86,7 +103,8 @@ def run_gpui(config: dict, host="127.0.0.1", port=0, debug=None,
         handle = start_web_server(config, host=host, port=port, debug=debug,
                                   ok_instance=ok_instance)
         binary = _resolve_binary(config)
-        command = [str(binary), "--url", handle.url, *_window_args(config)]
+        command = [str(binary), "--url", handle.url, *_window_args(config),
+                   *_ui_pref_args(config)]
         if debug is True or bool(config.get("debug")):
             command.append("--debug")
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
